@@ -13,9 +13,19 @@ class CategoryBase(BaseModel):
 class CategoryResponse(CategoryBase):
     id: int
     parent_id: Optional[int] = None
+    similarity: Optional[float] = None
 
 class VectorSearchRequest(BaseModel):
     vector: List[float]
+    limit: Optional[int] = 10
+
+class CategorySearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = 10
+
+class ClosestCategoryRequest(BaseModel):
+    query: Optional[str] = None
+    vector: Optional[List[float]] = None
     limit: Optional[int] = 10
 
 # ----------------- PRODUCT SCHEMAS -----------------
@@ -38,6 +48,14 @@ class ProductBase(BaseModel):
 
 class ProductResponse(ProductBase):
     id: int
+    similarity: Optional[float] = None
+
+class ClosestProductRequest(BaseModel):
+    query: Optional[str] = None
+    vector: Optional[List[float]] = None
+    category_id: Optional[int] = None
+    limit: Optional[int] = 10
+
 
 # ----------------- REVIEW SCHEMAS -----------------
 class ReviewBase(BaseModel):

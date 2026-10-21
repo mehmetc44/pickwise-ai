@@ -1,5 +1,7 @@
 // Common API address
-const BASE_URL = "http://localhost:8001";
+const BASE_URL = (typeof window !== "undefined" && window.location.port === "8001") 
+    ? window.location.origin 
+    : "http://localhost:8001";
 
 
 // Fetch categories from API and populate menus
@@ -148,13 +150,29 @@ function renderProducts(products, isAiSearch = false) {
             badgeHtml = `<span class="badge bg-success position-absolute top-0 end-0 m-2 shadow-sm">Eşleşme: ${p.cross_encoder_score.toFixed(1)}%</span>`;
         }
 
+        // Sol kenarda küçücük benzerlik oranı badge'i
+        let similarityBadgeHtml = "";
+        if (p.similarity !== undefined && p.similarity !== null) {
+            const simScore = Math.max(0, Math.min(100, (p.similarity * 100)));
+            const formattedSim = simScore.toFixed(1);
+            similarityBadgeHtml = `
+                <span class="badge bg-dark bg-opacity-75 text-white position-absolute top-0 start-0 m-2 shadow-sm border border-secondary" 
+                      style="font-size: 0.68rem; font-weight: 600; padding: 2px 5px; z-index: 5; backdrop-filter: blur(4px); border-radius: 4px;"
+                      title="Vektör Benzerlik Skoru: %${formattedSim}">
+                    <i class="fa-solid fa-bullseye text-warning me-1" style="font-size: 0.6rem;"></i>%${formattedSim}
+                </span>`;
+        }
+
         const brandText = p.brand ? `<span class="fw-bold text-dark me-1" style="font-size: 0.9rem;">${p.brand}</span>` : '';
 
         resultsDiv.innerHTML += `
             <div class="col">
-                <div class="card h-100 border product-card" onclick="window.location.href='${productLink}'" style="cursor: pointer; border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.05);" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)'">
+                <div class="card h-100 border product-card" style="border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.05);" onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.15)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)'">
                     <div class="img-wrap bg-white" style="height: 250px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;">
-                        <img src="${imageUrl}" alt="${productName}" style="max-height: 100%; max-width: 100%; object-fit: cover;">
+                        <a href="${productLink}" class="d-flex align-items-center justify-content-center w-100 h-100 text-decoration-none">
+                            <img src="${imageUrl}" alt="${productName}" style="max-height: 100%; max-width: 100%; object-fit: cover;">
+                        </a>
+                        ${similarityBadgeHtml}
                         ${badgeHtml}
                         
                         <!-- AI Add Button (Shows on Hover) -->
@@ -172,9 +190,11 @@ function renderProducts(products, isAiSearch = false) {
                     </div>
 
                     <div class="info-wrap p-2 d-flex flex-column bg-white text-start" style="flex-grow: 1;">
-                        <div class="title text-truncate-2 d-block mb-1" title="${productName}" style="color: #333; font-size: 0.85rem; line-height: 1.3; height: 2.6em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-                            ${brandText}${productName}
-                        </div>
+                        <a href="${productLink}" class="text-decoration-none" style="color: inherit;">
+                            <div class="title text-truncate-2 d-block mb-1" title="${productName}" style="color: #333; font-size: 0.85rem; line-height: 1.3; height: 2.6em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
+                                ${brandText}${productName}
+                            </div>
+                        </a>
                         
                         <div class="mb-2 mt-1 d-flex align-items-center">
                             ${starsHtml}
@@ -182,7 +202,9 @@ function renderProducts(products, isAiSearch = false) {
                         </div>
                         
                         <div class="mt-auto pt-1 text-start">
-                            <span class="price-discount text-danger fw-bold" style="font-size: 1.1rem;">${priceText}</span>
+                            <a href="${productLink}" class="text-decoration-none">
+                                <span class="price-discount text-danger fw-bold" style="font-size: 1.1rem;">${priceText}</span>
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -335,8 +357,102 @@ async function sendMessageToAI() {
     }
 }
 
+// Arama Çubuğu ve Vektör Benzerliği Arama Mantığı
+async function search(customQuery) {
+    const searchInput = document.getElementById("searchInput");
+    const query = (customQuery !== undefined ? customQuery : (searchInput ? searchInput.value : "")).trim();
+    if (!query) return;
+
+    if (searchInput) {
+        searchInput.value = query;
+    }
+
+    const resultsDiv = document.getElementById("results");
+    const sectionTitle = document.querySelector("#sectionTitle");
+
+    // Yükleniyor durumu göster
+    if (resultsDiv) {
+        resultsDiv.innerHTML = `
+            <div class="col-12 text-center my-5 py-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                <h5 class="mt-3 text-muted">"${query}" için en yakın ürünler aranıyor...</h5>
+                <p class="text-secondary small"><i class="fa-solid fa-brain me-1 text-primary"></i>Vektör benzerliği hesaplanıyor</p>
+            </div>
+        `;
+    }
+
+    if (sectionTitle) {
+        sectionTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass text-primary me-2"></i>"${query}" aranıyor...`;
+    }
+
+    try {
+        const response = await fetch(`${BASE_URL}/api/v1/products/closest`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                query: query,
+                limit: 50
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Hatası: ${response.status}`);
+        }
+
+        const data = await response.json();
+        let products = Array.isArray(data) ? data : (data.data || []);
+
+        // Benzerlik oranlarına göre azalan sırada sırala
+        products.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+
+        if (sectionTitle) {
+            sectionTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass text-primary me-2"></i>"${query}" İçin En Yakın Ürünler <span class="badge bg-secondary fs-6 ms-2">${products.length} Ürün</span>`;
+        }
+
+        renderProducts(products);
+
+        // Sonuç alanına yumuşak geçiş yap
+        if (resultsDiv) {
+            resultsDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+    } catch (error) {
+        console.error("Vektör arama hatası:", error);
+        if (resultsDiv) {
+            resultsDiv.innerHTML = `
+                <div class="col-12 text-center my-5 py-5 text-danger">
+                    <i class="fa-solid fa-circle-exclamation fa-2x mb-3"></i>
+                    <h5>Ürünler aranırken bir hata oluştu.</h5>
+                    <p class="text-muted small">${error.message}</p>
+                </div>
+            `;
+        }
+    }
+}
+window.search = search;
+
 document.addEventListener("DOMContentLoaded", () => {
-    loadProducts();
+    // Bind search input Enter key
+    const searchInput = document.getElementById("searchInput");
+    if (searchInput) {
+        searchInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                search();
+            }
+        });
+    }
+
+    // URL'de ?search=... parametresi varsa otomatik ara
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchQuery = urlParams.get("search");
+    if (searchQuery) {
+        if (searchInput) searchInput.value = searchQuery;
+        search(searchQuery);
+    } else {
+        loadProducts();
+    }
     
     // Bind chat events
     const sendBtn = document.getElementById("chatSendBtn");

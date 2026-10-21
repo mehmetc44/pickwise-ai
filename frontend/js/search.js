@@ -1,117 +1,109 @@
-document.addEventListener("DOMContentLoaded", () => {
-    const chatInput = document.getElementById("chatInput");
-    const chatSendBtn = document.getElementById("chatSendBtn");
-    const chatMessages = document.getElementById("chatMessages");
-    const searchInput = document.getElementById("searchInput");
+// ==========================================
+// Arama Çubuğu ve Vektör Benzerliği Arama Mantığı
+// ==========================================
 
-    // Yardımcı: Mesaj Ekleme
-    function addMessage(text, isUser = false) {
-        if (!text.trim()) return;
-        
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "d-flex mb-3 " + (isUser ? "justify-content-end" : "");
-        
-        const innerDiv = document.createElement("div");
-        innerDiv.className = isUser 
-            ? "bg-light text-dark p-2 rounded shadow-sm border" 
-            : "bg-primary text-white p-2 rounded shadow-sm";
-        
-        // Chat baloncuğu yuvarlaklık ayarı
-        innerDiv.style.maxWidth = "80%";
-        innerDiv.style.borderRadius = isUser ? "15px 15px 0 15px" : "15px 15px 15px 0";
-        innerDiv.innerText = text;
-        
-        msgDiv.appendChild(innerDiv);
-        chatMessages.appendChild(msgDiv);
-        
-        // Scroll to bottom
-        chatMessages.scrollTop = chatMessages.scrollHeight;
+async function search(customQuery) {
+    const searchInput = document.getElementById("searchInput");
+    const query = (customQuery !== undefined ? customQuery : (searchInput ? searchInput.value : "")).trim();
+    if (!query) return;
+
+    if (searchInput) {
+        searchInput.value = query;
     }
 
-    // Chat'ten Mesaj Gönderme
-    function handleChatSend() {
-        const text = chatInput.value.trim();
-        if (text) {
-            addMessage(text, true); // Kullanıcı mesajı
-            chatInput.value = "";
-            
-            // İşlevsiz bot cevabı (demo amaçlı)
-            setTimeout(() => {
-                addMessage("Şu an geliştirilme aşamasındayım, maalesef mesajınıza yanıt veremiyorum.");
-            }, 1000);
+    // Eğer product.html gibi index dışı bir sayfadaysak index.html'e yönlendir
+    const isIndexPage = !!document.getElementById("results");
+    if (!isIndexPage) {
+        window.location.href = `index.html?search=${encodeURIComponent(query)}`;
+        return;
+    }
+
+    const resultsDiv = document.getElementById("results");
+    const sectionTitle = document.querySelector("#sectionTitle");
+
+    // Yükleniyor durumu göster
+    if (resultsDiv) {
+        resultsDiv.innerHTML = `
+            <div class="col-12 text-center my-5 py-5">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;"></div>
+                <h5 class="mt-3 text-muted">"${query}" için en yakın ürünler aranıyor...</h5>
+                <p class="text-secondary small"><i class="fa-solid fa-brain me-1 text-primary"></i>Vektör benzerliği hesaplanıyor</p>
+            </div>
+        `;
+    }
+
+    if (sectionTitle) {
+        sectionTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass text-primary me-2"></i>"${query}" aranıyor...`;
+    }
+
+    try {
+        const apiUrl = typeof BASE_URL !== "undefined" ? BASE_URL : "http://localhost:8001";
+        const response = await fetch(`${apiUrl}/api/v1/products/closest`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                query: query,
+                limit: 50
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`API Hatası: ${response.status}`);
+        }
+
+        const data = await response.json();
+        let products = Array.isArray(data) ? data : (data.data || []);
+
+        // Benzerlik oranlarına göre azalan sırada sırala (yüksek benzerlik en başta)
+        products.sort((a, b) => (b.similarity || 0) - (a.similarity || 0));
+
+        if (sectionTitle) {
+            sectionTitle.innerHTML = `<i class="fa-solid fa-magnifying-glass text-primary me-2"></i>"${query}" İçin En Yakın Ürünler <span class="badge bg-secondary fs-6 ms-2">${products.length} Ürün</span>`;
+        }
+
+        renderProducts(products);
+
+        // Sonuç alanına yumuşak geçiş yap
+        resultsDiv.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+        console.error("Vektör arama hatası:", error);
+        if (resultsDiv) {
+            resultsDiv.innerHTML = `
+                <div class="col-12 text-center my-5 py-5 text-danger">
+                    <i class="fa-solid fa-circle-exclamation fa-2x mb-3"></i>
+                    <h5>Ürünler aranırken bir hata oluştu.</h5>
+                    <p class="text-muted small">${error.message}</p>
+                </div>
+            `;
         }
     }
+}
 
-    if (chatSendBtn) {
-        chatSendBtn.addEventListener("click", handleChatSend);
-    }
+// Global erişim
+window.search = search;
 
-    if (chatInput) {
-        chatInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") handleChatSend();
-        });
-    }
+document.addEventListener("DOMContentLoaded", () => {
+    const searchInput = document.getElementById("searchInput");
 
-    // Arama Çubuğu (Üst Kısım) Entegrasyonu
+    // Enter tuşuna basıldığında aramayı başlat
     if (searchInput) {
         searchInput.addEventListener("keypress", (e) => {
             if (e.key === "Enter") {
-                const query = searchInput.value.trim();
-                if (query) {
-                    // Paneli Aç
-                    const aiPanelEl = document.getElementById("aiPanel");
-                    const aiPanel = bootstrap.Offcanvas.getOrCreateInstance(aiPanelEl);
-                    aiPanel.show();
-                    
-                    // Arama sorgusunu chat'e aktar
-                    addMessage(query, true);
-                    searchInput.value = "";
-                    
-                    // İşlevsiz cevap
-                    setTimeout(() => {
-                        addMessage(`"${query}" araması için henüz sonuç getiremiyorum.`);
-                    }, 1000);
-                }
+                e.preventDefault();
+                search();
             }
         });
     }
-});
 
-// Küresel arama butonu işlevi (Eğer index.html'den çağrılıyorsa)
-function search() {
-    const searchInput = document.getElementById("searchInput");
-    if (searchInput && searchInput.value.trim()) {
-        const query = searchInput.value.trim();
-        const aiPanelEl = document.getElementById("aiPanel");
-        const aiPanel = bootstrap.Offcanvas.getOrCreateInstance(aiPanelEl);
-        aiPanel.show();
-        
-        const chatMessages = document.getElementById("chatMessages");
-        
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "d-flex mb-3 justify-content-end";
-        const innerDiv = document.createElement("div");
-        innerDiv.className = "bg-light text-dark p-2 rounded shadow-sm border";
-        innerDiv.style.maxWidth = "80%";
-        innerDiv.style.borderRadius = "15px 15px 0 15px";
-        innerDiv.innerText = query;
-        msgDiv.appendChild(innerDiv);
-        chatMessages.appendChild(msgDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        searchInput.value = "";
-        
-        setTimeout(() => {
-            const botDiv = document.createElement("div");
-            botDiv.className = "d-flex mb-3";
-            const botInnerDiv = document.createElement("div");
-            botInnerDiv.className = "bg-primary text-white p-2 rounded shadow-sm";
-            botInnerDiv.style.maxWidth = "80%";
-            botInnerDiv.style.borderRadius = "15px 15px 15px 0";
-            botInnerDiv.innerText = `"${query}" araması için sonuç getirme işlemi şu an devre dışı.`;
-            botDiv.appendChild(botInnerDiv);
-            chatMessages.appendChild(botDiv);
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-        }, 1000);
+    // URL'de ?search=... parametresi varsa otomatik ara
+    const urlParams = new URLSearchParams(window.location.search);
+    const searchQuery = urlParams.get("search");
+    if (searchQuery) {
+        if (searchInput) {
+            searchInput.value = searchQuery;
+        }
+        search(searchQuery);
     }
-}
+});

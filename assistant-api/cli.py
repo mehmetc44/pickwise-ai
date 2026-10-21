@@ -4,9 +4,10 @@ import sys
 # Add src to python path if not already there
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
-from graph import app_graph
+from graph import AgenticCommerceWorkflow
 
 def main():
+    workflow = AgenticCommerceWorkflow()
     print("🤖 Agentic Commerce CLI 🤖")
     print("Type 'exit' or 'quit' to stop.\n")
     
@@ -20,15 +21,9 @@ def main():
             if not user_input.strip():
                 continue
                 
-            initial_state = {
-                "user_query": user_input,
-                "analysis": "",
-                "response": ""
-            }
-            
             print("Thinking...")
             # Invoke LangGraph
-            final_state = app_graph.invoke(initial_state)
+            final_state = workflow.execute(user_input)
             
             # Retrieve results
             response_text = final_state.get("response", "No response generated.")

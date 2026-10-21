@@ -42,7 +42,4 @@ class SupervisorAgent(BaseAgent):
         })
         
         # LangGraph için partial state döneriz, mevcut state'i günceller
-        return {
-            "intent": result.intent,
-            "supervisor_reasoning": result.reasoning
-        }
+        return {"intent": result.intent}

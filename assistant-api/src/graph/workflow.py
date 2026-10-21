@@ -1,35 +1,23 @@
 from langgraph.graph import StateGraph, START, END
 from graph.state import AgenticCommerceState
 from agents.supervisor import SupervisorAgent
-from agents.search_agent import SearchAgent
-from agents.simple_nodes import ClarificationNode, CompareNode, ReviewNode, ResponseBuilderNode
+from agents.search_node import SearchNode
+from agents.response_builder import ResponseBuilderNode
 
-def route_by_intent(state: AgenticCommerceState) -> str:
-    """Supervisor'ın belirlediği intent'e göre gidilecek node'u seçer."""
-    intent = state.get("intent", "general_chat")
-    
-    routes = {
-        "product_search": "search_node",
-        "product_compare": "compare_node",
-        "product_review": "review_node",
-        "clarification_needed": "clarification_node"
-    }
-    
-    return routes.get(intent, "response_builder_node")
 
 class AgenticCommerceWorkflow:
     """
     Sistemin ana iş akışını (LangGraph) yöneten sınıf.
+
+    Akış:
+        START -> supervisor_node -> search_node -> response_builder_node -> END
     """
     def __init__(self):
         # 1. Bağımlılıkları başlat
         self.supervisor = SupervisorAgent()
-        self.search_agent = SearchAgent()
-        self.clarification = ClarificationNode()
-        self.compare = CompareNode()
-        self.review = ReviewNode()
+        self.search = SearchNode()
         self.response_builder = ResponseBuilderNode()
-        
+
         # 2. Graph'ı inşa et
         self.app_graph = self._build_graph()
 
@@ -38,43 +26,27 @@ class AgenticCommerceWorkflow:
 
         # Node'ları ekle
         workflow.add_node("supervisor_node", self.supervisor.invoke)
-        workflow.add_node("search_node", self.search_agent.invoke)
-        workflow.add_node("clarification_node", self.clarification.invoke)
-        workflow.add_node("compare_node", self.compare.invoke)
-        workflow.add_node("review_node", self.review.invoke)
+        workflow.add_node("search_node", self.search.invoke)
         workflow.add_node("response_builder_node", self.response_builder.invoke)
 
-        # Entry point -> Supervisor
+        # Lineer akış
         workflow.add_edge(START, "supervisor_node")
-
-        # Supervisor -> Conditional Routing
-        workflow.add_conditional_edges("supervisor_node", route_by_intent)
-
-        # Tüm alt node'lar bittiğinde akışı Response Builder'a yolla
+        workflow.add_edge("supervisor_node", "search_node")
         workflow.add_edge("search_node", "response_builder_node")
-        workflow.add_edge("clarification_node", "response_builder_node")
-        workflow.add_edge("compare_node", "response_builder_node")
-        workflow.add_edge("review_node", "response_builder_node")
-
-        # Response Builder'dan sonra akışı bitir
         workflow.add_edge("response_builder_node", END)
 
         return workflow.compile()
 
-    def execute(self, user_query: str, context_products: list = None) -> dict:
+    def execute(self, user_query: str) -> dict:
         """
         Sistemi dışarıdan tetiklemek için kullanılacak yardımcı metot.
         State'i hazırlar ve graph'ı çalıştırıp sonucu döner.
         """
-        initial_state = {
+        initial_state: AgenticCommerceState = {
             "user_query": user_query,
-            "messages": [],
             "intent": "",
-            "supervisor_reasoning": "",
             "response": "",
-            "context_products": context_products or []
         }
-        
+
         # Graph'ı senkron olarak çalıştır
-        result = self.app_graph.invoke(initial_state)
-        return result
+        return self.app_graph.invoke(initial_state)

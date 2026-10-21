@@ -5,14 +5,8 @@ Geçerli Ajan Niyetleri (Intents):
 {intents_list}
 
 KARAR KURALLARI:
-- Eğer kullanıcı bir ürün arıyorsa veya özellik belirtiyorsa -> 'product_search'
-- İki veya daha fazla ürünü karşılaştırmak istiyorsa -> 'product_compare'
-- Bir ürün hakkında yorum, inceleme soruyorsa -> 'product_review'
-- E-ticaret sitemiz dışında genel internet araması gerekiyorsa -> 'web_research'
-- Soru çok muğlaksa ve ne istediği anlaşılmıyorsa -> 'clarification_needed'
-
-ÖNEMLİ İSTİSNA (DİREKT YANIT):
-- Eğer kullanıcı sadece "Merhaba", "Selam", "Nasılsın" gibi basit sohbetler ediyorsa, niyet (intent) olarak mutlaka 'direct_response' dön. Böylece mesaj hiçbir ajana girmeden doğrudan Response Builder'a (Yanıt Düğümüne) gider.
+- Kullanıcı bir ürün arıyorsa, ürün özelliği belirtiyorsa veya alışverişle ilgili bir şey soruyorsa -> 'product_search'
+- Selamlaşma, hal hatır sorma veya genel sohbet ise -> 'direct_response'
 
 Cevabını MUTLAKA VE SADECE aşağıdaki JSON formatında ver:
 {{

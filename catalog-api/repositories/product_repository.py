@@ -51,3 +51,35 @@ class ProductRepository:
                 return cursor.fetchall()
         finally:
             DBContext.release_connection(conn)
+
+    def get_closest(self, vector: list[float], limit: int = 10, category_id: int = None):
+        conn = DBContext.get_connection()
+        try:
+            with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+                vector_str = "[" + ",".join(map(str, vector)) + "]"
+                if category_id:
+                    query = """
+                    SELECT p.*, c.full_path,
+                           1 - (p.text_embedding <=> %s::vector) AS similarity
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    WHERE p.text_embedding IS NOT NULL AND p.category_id = %s
+                    ORDER BY p.text_embedding <=> %s::vector
+                    LIMIT %s
+                    """
+                    cursor.execute(query, (vector_str, category_id, vector_str, limit))
+                else:
+                    query = """
+                    SELECT p.*, c.full_path,
+                           1 - (p.text_embedding <=> %s::vector) AS similarity
+                    FROM products p
+                    LEFT JOIN categories c ON p.category_id = c.id
+                    WHERE p.text_embedding IS NOT NULL
+                    ORDER BY p.text_embedding <=> %s::vector
+                    LIMIT %s
+                    """
+                    cursor.execute(query, (vector_str, vector_str, limit))
+                return cursor.fetchall()
+        finally:
+            DBContext.release_connection(conn)
+
