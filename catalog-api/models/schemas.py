@@ -15,19 +15,6 @@ class CategoryResponse(CategoryBase):
     parent_id: Optional[int] = None
     similarity: Optional[float] = None
 
-class VectorSearchRequest(BaseModel):
-    vector: List[float]
-    limit: Optional[int] = 10
-
-class CategorySearchRequest(BaseModel):
-    query: str
-    limit: Optional[int] = 10
-
-class ClosestCategoryRequest(BaseModel):
-    query: Optional[str] = None
-    vector: Optional[List[float]] = None
-    limit: Optional[int] = 10
-
 # ----------------- PRODUCT SCHEMAS -----------------
 class ProductBase(BaseModel):
     name: str

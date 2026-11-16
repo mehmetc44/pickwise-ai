@@ -17,8 +17,10 @@ dependencies = [
     "langchain-huggingface>=1.2.2",
     "langchain-ollama>=1.1.0",
     "langchain-openai>=1.4.1",
+    "langchain-mcp-adapters>=0.1.0",
     "langgraph>=1.2.10",
     "langsmith>=0.12.4",
+    "mcp>=1.0.0",
     "pgvector>=0.5.1",
     "psycopg2-binary",
     "pydantic>=2.13.5",
@@ -30,4 +32,9 @@ dependencies = [
     "transformers==4.40.1",
     "uvicorn>=0.53.0",
     "websockets>=16.1.1",
+]
+
+[dependency-groups]
+dev = [
+    "langgraph-cli[inmem]>=0.1.0",
 ]

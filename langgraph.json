@@ -1,0 +1,9 @@
+{
+  "$schema": "https://langgra.ph/schema.json",
+  "dependencies": ["."],
+  "graphs": {
+    "agentic_commerce": "./assistant-api/src/graph/workflow.py:make_studio_graph"
+  },
+  "env": "./assistant-api/.env"
+}
+

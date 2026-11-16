@@ -1,60 +1,10 @@
 # ============================================================
-# AgenticCommerce — Agent Konfigürasyonu
-# ============================================================
-# Bu dosya graph'taki node'ların model ve parametre ayarlarını
-# merkezi olarak yönetir. Her anahtar, BaseAgent(config_key)
-# ile okunur. API anahtarları ve URL'ler .env dosyasındadır.
-#
-# Akış: START -> supervisor -> search -> response_builder -> END
+# AgenticCommerce — Ajan Konfigürasyonları
 # ============================================================
 
-# ------------------------------------------------------------
-# Supervisor
-# Görev: Kullanıcı niyetini (intent) tespit edip state'e yazar.
-# Beklenen output: {"intent": "...", "confidence": 0.97, "reasoning": "..."}
-# ------------------------------------------------------------
 supervisor:
   provider: deepseek
   model: deepseek-chat
-  temperature: 0.0           # Sınıflandırma deterministik olmalı
-  max_tokens: 256            # intent + confidence + reasoning JSON'u için yeterli
-  timeout_seconds: 10
-
-  # Geçerli intent listesi (prompt'a {intents_list} olarak enjekte edilir)
-  intents:
-    - product_search
-    - direct_response
-
-# ------------------------------------------------------------
-# Search Node
-# Görev: Kullanıcının aradığı ürünleri bulur.
-# Durum: Henüz tanımlanmadı (agents/search_node.py).
-# ------------------------------------------------------------
-search_agent:
-  provider: deepseek
-  model: deepseek-chat
-  temperature: 0.2
-  max_tokens: 1024
-  max_iterations: 6          # ReAct loop'u en fazla 6 adım
+  temperature: 0.3
+  max_tokens: 2048
   timeout_seconds: 45
-
-# ------------------------------------------------------------
-# Response Builder
-# Görev: Önceki node'ların ham cevabını kullanıcıya sunulacak
-# formata dönüştürür.
-# ------------------------------------------------------------
-response_builder:
-  provider: deepseek
-  model: deepseek-chat
-  temperature: 0.4
-  max_tokens: 1500
-  timeout_seconds: 30
-
-# ------------------------------------------------------------
-# Embedding
-# Görev: Metinden vektör üretir (rag/embedder.py).
-# ------------------------------------------------------------
-embedding:
-  model: Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0
-  vector_dimension: 768
-  device: cpu

@@ -1,29 +1,41 @@
 """
 AgenticCommerce — AI Servisi (Port: 8000)
 
-Sadece chatbot ve AI endpointlerini içerir.
-DB ve ürün/kategori endpointleri catalog-api (Port: 8001) servisine taşındı.
+Supervisor ReAct Agent + MCP ToolNode + SearchNode iş akışı.
 """
+
+from contextlib import asynccontextmanager
+import os
+import sys
+from typing import Any, List, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import sys
-import os
 
 # Add src directory to Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
 
 from graph.workflow import AgenticCommerceWorkflow
 
+workflow_engine = AgenticCommerceWorkflow()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        await workflow_engine.initialize()
+    except Exception as exc:
+        print(f"⚠️ Başlangıçta MCP/Workflow başlatılamadı (ilk istekte tekrar denenecek): {exc}")
+    yield
+
+
 app = FastAPI(
     title="AgenticCommerce — AI Service",
-    description="AI chatbot servisi. DB işlemleri için catalog-api kullanılır.",
+    description="LangGraph + MCP tabanlı e-ticaret asistan servisi.",
     version="2.0.0",
+    lifespan=lifespan,
 )
-
-# Uygulama ayağa kalkarken graph'ı (ve agent'ları) başlatıyoruz
-workflow_engine = AgenticCommerceWorkflow()
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,6 +48,8 @@ app.add_middleware(
 
 class ChatRequest(BaseModel):
     query: str
+    session_id: str = "default"
+    context_products: Optional[List[Any]] = None
 
 
 @app.get("/health")
@@ -46,14 +60,14 @@ async def health():
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
     try:
-        # LangGraph grafiğini (Workflow Engine üzerinden) çalıştır
-        final_state = workflow_engine.execute(user_query=request.query)
+        final_state = await workflow_engine.aexecute(
+            user_query=request.query,
+            session_id=request.session_id,
+        )
 
-        # Şimdilik dönen intent'i test amaçlı görebiliriz
         return {
-            "intent": final_state.get("intent", ""),
-            "response": final_state.get("response", "")
+            "response": final_state.get("response", ""),
+            "found_products": final_state.get("found_products", []),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
