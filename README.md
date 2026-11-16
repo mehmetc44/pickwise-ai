@@ -1,65 +1,80 @@
 # AgenticCommerce
 
-AgenticCommerce, geleneksel arama motorlarının ötesine geçen, **LangGraph** destekli ve **Çoklu Ajan (Multi-Agent)** mimarisiyle çalışan yeni nesil bir yapay zeka e-ticaret ekosistemidir. Kullanıcı niyetini dinamik olarak anlar, yönlendirir ve en karmaşık e-ticaret senaryolarını otonom olarak çözer.
+AgenticCommerce, **LangGraph**, **FastMCP** ve **pgvector** tabanlı; ürün keşfi, teknik detay inceleme, ürün karşılaştırma ve müşteri yorumu analizi yapabilen çoklu-ajan (Multi-Agent) e-ticaret asistanı platformudur.
+
+---
 
 ## 🏗️ Sistem Mimarisi
 
-Proje, bağımsız ve özelleşmiş mikro servislerden oluşmaktadır.
+Proje birbirinden bağımsız 4 ana bileşenden oluşur:
 
-### 1. `assistant-api` (LangGraph Multi-Agent Sistemi)
-Sistemin beynidir. Doğrusal (linear) bir arama yapmak yerine, **Supervisor (Yönetici) Agent** kullanıcı sorgusunu analiz eder ve görevi en uygun uzman düğüme (node) atar:
-- **Search Node (Arama):** Arama işlemi aşamalı bir yapay zeka mimarisi kullanır:
-  1. Önce kullanıcı sorgusuyla anlamsal (semantic) olarak en çok eşleşen **ürün kategorileri** vektör benzerliği (vector similarity) ile bulunur.
-  2. Bulunan bu kategorilerin altındaki potansiyel ürünler veritabanından çekilir.
-  3. Son olarak bu aday ürünler **Bi-Encoder** ve **Cross-Encoder** (Reranker) modelleriyle çift aşamalı olarak puanlanır, sıralanır ve sadece kullanıcının niyetine en uygun ürünler seçilir.
-- **Compare Node (Karşılaştırma):** Birden fazla ürünün özelliklerini tablo halinde kıyaslar.
-- **Review Node (Yorum Analizi):** Müşteri yorumlarını okuyarak ürünün artılarını, eksilerini ve genel memnuniyeti özetler.
-- **Clarification Node (Netleştirme):** Kullanıcı çok muğlak bir soru sorduğunda (örn: "Ayakkabı arıyorum"), bütçe veya renk gibi eksik detayları öğrenmek için sorular sorar.
-- **Response Builder Node:** Tüm ajanlardan gelen ham verileri toplayıp, kullanıcıya sunulacak son ve şık cevabı (Markdown/HTML) derler.
+### 1. `assistant-api` (LangGraph İş Akışı — Port: `8000`)
+Kullanıcıyla sohbet eden, araçları yöneten ve çok turlu oturum hafızasını (`MemorySaver`) tutan orkestrasyon katmanıdır.
 
-**Teknoloji Yığını:** Python, LangGraph, LangChain, DeepSeek API & Ollama.
+```text
+[START] ──► supervisor_node (ReAct Ajanı & Yanıt Üretici)
+                ├── delegate_to_search ──► search_node (MCP: get_closest_products) ──► supervisor_node
+                ├── detay/kıyas/yorum  ──► tool_node   (MCP: details, compare, reviews) ──► supervisor_node
+                └── doğrudan yanıt     ──► [END]
+```
 
-### 2. `catalog-api` (Katalog ve Ürün Servisi)
-E-ticaret ürün kataloğunu, kategorileri ve kullanıcı yorumlarını yöneten güçlü arka uç (backend) servisidir. Assistant API içerisindeki ajanların (agents) doğru kararlar alabilmesi için ihtiyaç duydukları veriyi sağlar.
+* **`supervisor_node` (`SupervisorAgent`):** Kullanıcının niyetini anlar, gereksiz soru sormadan arama yaptırır veya sohbet eder; araçlardan dönen sonuçları kullanıcıya Markdown formatında sunar.
+* **`search_node` (`SearchNode`):** `delegate_to_search` çağrısını yakalar, `mcp-server` üzerinden katalog araması yapar ve `found_products` state'ini günceller.
+* **`tool_node` (`ToolNode`):** MCP üzerinden ürün detayı, karşılaştırma ve yorum araçlarını çalıştırır.
 
-**Teknoloji Yığını:** Python, FastAPI, PostgreSQL (pgvector).
+**Teknoloji Yığını:** Python, FastAPI, LangGraph, LangChain, DeepSeek / OpenAI / Ollama.
 
-### 3. `frontend` (Kullanıcı Arayüzü)
-Kullanıcıların yapay zeka asistanıyla doğrudan sohbet edebildiği, ürünleri inceleyip ajanların arka planda nasıl karar aldığını (reasoning) görebildiği modern web arayüzü.
+---
 
-### 4. `shared` (AI Modelleri)
-Sistem genelinde paylaşılan AI varlıklarını içerir. Ürün ve kategori vektörizasyonu için e-ticarete özel olarak eğitilmiş, yüksek isabetli `Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0` modelini kullanır.
+### 2. `mcp-server` (Tekil MCP Tool Sunucusu)
+Ajanların `catalog-api` ile iletişim kurduğu standart **Model Context Protocol (FastMCP)** katmanıdır (`stdio` / `streamable_http`):
+* `get_closest_products`: Vektör benzerliği ile katalogdan ürün arama
+* `get_product_details`: Tekil ürünün teknik özelliklerini ve fiyatını getirme
+* `compare_products`: Birden fazla ürünü kıyaslama için toplu detay çekme
+* `get_product_reviews`: Ürün müşteri yorumlarını getirme
 
-## 🚀 Öne Çıkan Özellikler
+---
 
-- **Agentic İş Akışı:** Sadece bir arama motoru değil; arama, karşılaştırma, yorum analizi yapma veya kullanıcıdan detay isteme kararlarını kendi kendine verebilen düşünen bir sistem.
-- **Gelişmiş Semantik Arama ve Sıralama (Reranking):** E-ticaret verilerine özel vektör modelleri (Trendyol Embedding) ile tam isabetli anlamsal eşleşme yapılır. Sadece vektör benzerliği değil; Bi-Encoder ile hızlı kategori/ürün eşleşmesi, ardından Cross-Encoder ile son derece hassas ürün yeniden sıralaması (reranking) gerçekleştirilerek kusursuz sonuçlar elde edilir.
-- **Dinamik Yorum Analizi:** AI butonu sayesinde binlerce yorum saniyeler içinde okunarak pro/con (artı/eksi) listesine çevrilir.
-- **Gerçek Zamanlı Graph İzleme:** LangSmith ve LangGraph Studio ile %100 uyumlu izlenebilir (traceable) ajan iş akışları.
+### 3. `catalog-api` (Katalog ve Vektör Servisi — Port: `8001`)
+Ürün, kategori ve yorum verilerini PostgreSQL + `pgvector` üzerinden sunan N-Tier FastAPI servisidir.
+* **Embedding Modeli:** `Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0` (`shared/ai-models/embeddings`)
+* **Veritabanı:** PostgreSQL + `pgvector`
+
+---
+
+### 4. `frontend` (Web Arayüzü — Port: `3000`)
+Ürün listeleme, vektör tabanlı arama çubuğu, ürün detay sayfası ve AI asistan sohbet panelini içeren web arayüzü.
+
+---
 
 ## 🛠️ Kurulum ve Çalıştırma
 
 ### Gereksinimler
-- Python 3.10+
-- PostgreSQL (ve `pgvector` eklentisi)
-- `uv` paket yöneticisi (önerilir)
+* Python 3.12+
+* PostgreSQL (`pgvector` eklentisi aktif)
+* `uv` paket yöneticisi
 
-### Servisleri Başlatma
-Sistem ortamları proje kök dizininde yapılandırılmıştır.
-
-Örneğin asistan API'yi çalıştırmak için:
+### Bağımlılıkları Yükleme
 ```bash
-cd assistant-api
-uv run main.py
+uv sync
 ```
 
-### Ajan Grafiğini Görselleştirme
-LangGraph mimarindeki ajanların birbiriyle nasıl konuştuğunu ve yönlendirmeleri görmek için şema oluşturabilirsin:
+### Tüm Servisleri Başlatma
+`catalog-api` (`:8001`), `assistant-api` (`:8000`) ve `frontend` (`:3000`) servislerini tek komutla ayağa kaldırır:
 ```bash
-cd assistant-api
-uv run generate_graph.py
+uv run python run.py
 ```
-Bu komut, aktif iş akışının güncel yapısını `graph_visualization.png` olarak bulunduğun klasöre çıkartacaktır.
+
+### LangGraph Studio ile Görsel Test & Debug
+`catalog-api` çalışırken ajan akışını, düğüm geçişlerini ve state değişimlerini canlı izlemek için:
+```bash
+uv run langgraph dev --no-reload
+```
+*(İzleme/Tracing için `assistant-api/.env` içindeki `LANGCHAIN_TRACING_V2` ve `LANGCHAIN_API_KEY` değişkenleri kullanılır.)*
 
 ---
-*Geleceğin diyalog odaklı (conversational) e-ticaret deneyimi için inşa edildi.*
+
+## 🗺️ Planlanan Geliştirmeler (Yol Haritası)
+* `SearchNode` içerisine LLM tabanlı sorgu ayrıştırma ve **Tavily** (`web_search`) ile teknik uyumluluk araştırması eklenmesi
+* `catalog-api` üzerinde **Hibrit Arama (`pgvector + Full-Text/BM25 RRF + Cross-Encoder`)** motoruna geçiş
+* Görsel arama (**Vision Search**) ve sanal kıyafet deneme (**Virtual Try-On**) entegrasyonu
