@@ -9,5 +9,7 @@ class AgenticCommerceState(TypedDict):
     LangGraph ortak durum (state) yapısı.
     """
     messages: Annotated[list[BaseMessage], add_messages]
+    search_messages: Annotated[list[BaseMessage], add_messages]
+    search_call_id: str
     found_products: list[dict[str, Any]]
     response: str

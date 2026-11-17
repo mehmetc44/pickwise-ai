@@ -12,5 +12,6 @@ class Settings:
     
     EMBEDDING_MODEL_PATH: str = os.getenv("EMBEDDING_MODEL_PATH", "../shared/ai-models/embeddings")
     EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0")
+    EMBEDDING_DEVICE: str = os.getenv("EMBEDDING_DEVICE", "cpu")
 
 settings = Settings()

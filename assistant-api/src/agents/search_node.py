@@ -1,98 +1,99 @@
-import json
 from typing import Any
-from langchain_core.messages import AIMessage, ToolMessage
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.tools import BaseTool
+from langgraph.types import Overwrite
 
+from agents.base_agent import BaseAgent
 from graph.state import AgenticCommerceState
+from prompts.search_prompt import SEARCH_AGENT_SYSTEM_PROMPT
+from utils.mcp_parser import parse_mcp_tool_output
 
 
-def _parse_tool_output(raw: Any) -> list[dict[str, Any]]:
+class SearchNode(BaseAgent):
     """
-    MCP (langchain-mcp-adapters) çıktısını normalize eder.
-    MCP araçları veriyi `[{'type': 'text', 'text': '...'}]` blokları halinde döner;
-    bu fonksiyon blokların içindeki JSON'u çözer ve düz `list[dict]` üretir.
-    """
-    items: list[dict[str, Any]] = []
-
-    def _collect(obj: Any):
-        if isinstance(obj, dict):
-            if obj.get("type") == "text" and isinstance(obj.get("text"), str):
-                try:
-                    _collect(json.loads(obj["text"]))
-                except json.JSONDecodeError:
-                    pass
-            else:
-                items.append(obj)
-        elif isinstance(obj, list):
-            for el in obj:
-                _collect(el)
-        elif isinstance(obj, str):
-            try:
-                _collect(json.loads(obj))
-            except json.JSONDecodeError:
-                pass
-
-    _collect(raw)
-    return items
-
-
-class SearchNode:
-    """
-    Şimdilik MCP üzerindeki `get_closest_products` aracını çalıştırarak
-    ürünleri listeleyen ve Supervisor'a başarılı durum raporu dönen arama düğümü.
+    `search_tool_node` ile ReAct döngüsü kuran uzman Arama Ajanı düğümü.
     """
 
-    def __init__(self, get_closest_products_tool: BaseTool):
-        self.get_closest_products_tool = get_closest_products_tool
+    def __init__(self, tools: list[BaseTool]):
+        super().__init__(config_key="search")
+        self.llm_with_tools = self.llm.bind_tools(tools)
 
     async def ainvoke(self, state: AgenticCommerceState) -> dict:
-        last_message = state["messages"][-1]
-        if not isinstance(last_message, AIMessage) or not last_message.tool_calls:
-            return {}
+        search_messages = list(state.get("search_messages") or [])
+        search_call_id = state.get("search_call_id", "")
 
-        tool_messages: list[ToolMessage] = []
-        collected_products: list[dict[str, Any]] = []
+        # 1. Supervisor'dan yeni bir delegate_to_search görevi geldiyse iç geçmişi başlat
+        if not search_call_id:
+            last_main_msg = state["messages"][-1]
+            if not isinstance(last_main_msg, AIMessage) or not last_main_msg.tool_calls:
+                return {}
 
-        for tool_call in last_message.tool_calls:
-            if tool_call["name"] != "delegate_to_search":
-                continue
+            search_tc = next(
+                (tc for tc in last_main_msg.tool_calls if tc["name"] == "delegate_to_search"),
+                None,
+            )
+            if search_tc is None:
+                return {}
 
-            args = tool_call.get("args", {})
+            search_call_id = search_tc["id"]
+            args = search_tc.get("args", {})
             query = args.get("query", "")
             limit = int(args.get("limit", 8))
 
-            raw_result = await self.get_closest_products_tool.ainvoke(
-                {"query": query, "limit": limit}
+            task_prompt = (
+                f"Arama Görevi: {query}\n"
+                f"Her arama çağrısında önerilen limit: {limit}"
             )
-            products = _parse_tool_output(raw_result)
+            initial_messages = [
+                SystemMessage(content=SEARCH_AGENT_SYSTEM_PROMPT),
+                HumanMessage(content=task_prompt),
+            ]
+            ai_message = await self.llm_with_tools.ainvoke(initial_messages)
+            raw_search_msgs = [*initial_messages, ai_message]
+            outbound_search_msgs = Overwrite(raw_search_msgs)
+            full_history = raw_search_msgs
+        else:
+            # 2. search_tool_node dönüşü: mevcut search_messages üzerinden devam et
+            ai_message = await self.llm_with_tools.ainvoke(search_messages)
+            outbound_search_msgs = [ai_message]
+            full_history = [*search_messages, ai_message]
 
-            if products and "error" in products[0]:
-                content = f"Arama sırasında hata oluştu: {products[0]['error']}"
-            elif not products:
-                content = f"Arama tamamlandı ancak '{query}' için katalogda ürün bulunamadı."
-            else:
-                collected_products.extend(products)
-                lines = [
-                    f"Arama başarılı! '{query}' sorgusu için {len(products)} ürün bulundu:"
-                ]
-                for p in products:
-                    lines.append(
-                        f"- [ID: {p.get('id')}] {p.get('name')} | Marka: {p.get('brand') or '-'} | "
-                        f"Fiyat: {p.get('price')} {p.get('currency') or 'TRY'} | "
-                        f"Puan: {p.get('rating') or '-'} ({p.get('review_count') or 0} yorum) | "
-                        f"Kategori: {p.get('full_path') or '-'}"
-                    )
-                content = "\n".join(lines)
+        if getattr(ai_message, "tool_calls", None):
+            return {
+                "search_messages": outbound_search_msgs,
+                "search_call_id": search_call_id,
+            }
 
-            tool_messages.append(
-                ToolMessage(
-                    tool_call_id=tool_call["id"],
-                    name=tool_call["name"],
-                    content=content,
-                )
-            )
+        collected_products: list[dict[str, Any]] = []
+        seen_ids: set[Any] = set()
+        for msg in full_history:
+            if isinstance(msg, ToolMessage) and msg.name == "get_closest_products":
+                for prod in parse_mcp_tool_output(msg.content):
+                    if "error" in prod:
+                        continue
+                    pid = prod.get("id")
+                    if pid is not None and pid in seen_ids:
+                        continue
+                    if pid is not None:
+                        seen_ids.add(pid)
+                    collected_products.append(prod)
+
+        report_text = (
+            ai_message.content
+            if isinstance(ai_message.content, str)
+            else str(ai_message.content)
+        )
 
         return {
-            "messages": tool_messages,
+            "messages": [
+                ToolMessage(
+                    tool_call_id=search_call_id,
+                    name="delegate_to_search",
+                    content=report_text,
+                )
+            ],
+            "search_messages": outbound_search_msgs,
+            "search_call_id": "",
             "found_products": collected_products,
         }

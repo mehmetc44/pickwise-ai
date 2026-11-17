@@ -5,6 +5,7 @@ Tüm servisleri sırayla ayağa kaldırır:
   1. catalog-api   (Port: 8001)
   2. assistant-api (Port: 8000)
   3. frontend      (Port: 3000)
+  4. langgraph-dev (Port: 2024)
 """
 
 import subprocess
@@ -87,11 +88,26 @@ if __name__ == "__main__":
         port=3000,
     )
 
+    # 4. langgraph-dev (LangGraph Studio)
+    start_service(
+        name="langgraph-dev",
+        cwd=ROOT,
+        command=[
+            sys.executable, "-m", "langgraph_cli", "dev",
+            "--port", "2024",
+            "--no-reload",
+            "--no-browser",
+        ],
+        port=2024,
+    )
+
     print("\n" + "="*50)
     print("  Tüm servisler çalışıyor:")
     print("  catalog-api   → http://localhost:8001")
     print("  assistant-api → http://localhost:8000")
     print("  frontend      → http://localhost:3000")
+    print("  langgraph-dev → http://localhost:2024")
+    print("  Studio UI     → https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024")
     print("="*50)
     print("\nDurdurmak için Ctrl+C\n")
 

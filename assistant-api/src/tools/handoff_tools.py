@@ -4,11 +4,9 @@ from langchain_core.tools import tool
 @tool
 def delegate_to_search(query: str, limit: int = 8) -> str:
     """
-    Katalogda ürün aramak gerektiğinde işi uzman Search Node'a devreder.
-    query: Aranacak ürün veya kullanıcı ihtiyacını özetleyen temiz Türkçe arama metni.
-    limit: Getirilecek maksimum ürün sayısı (varsayılan 8).
+    Katalogda ürün aramak veya teknik uyumluluk araştırmak gerektiğinde
+    işi uzman Search Agent'a devreder.
+    query: Kullanıcının ürün/hediye/uyumluluk isteğini özetleyen net Türkçe metin.
+    limit: Arama başına getirilecek maksimum aday ürün sayısı (varsayılan 8).
     """
-    # Bu aracın gövdesi doğrudan çalışmaz; LangGraph conditional edge ile
-    # çağrıyı search_node'a yönlendirmek için handoff şeması olarak kullanılır.
-    return f"Search Node'a yönlendirildi: {query}"
-
+    return f"Search Agent'a yönlendirildi: {query}"

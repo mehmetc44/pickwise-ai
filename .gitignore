@@ -8,6 +8,6 @@ wheels/
 .env
 # Virtual environments
 .venv 
-DBLab/
+Lab/
 shared/ai-models/
 .langgraph_api/

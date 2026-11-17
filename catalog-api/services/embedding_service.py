@@ -27,6 +27,7 @@ class EmbeddingService:
             model_name,
             cache_folder=model_path,
             trust_remote_code=True,
+            device=settings.EMBEDDING_DEVICE,
         )
 
     def embed_text(self, text: str) -> list[float]:
