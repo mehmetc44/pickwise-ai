@@ -13,10 +13,6 @@ _STUDIO_LOCK = asyncio.Lock()
 
 
 async def make_studio_graph():
-    """
-    LangGraph Studio (langgraph dev) için checkpointer'sız grafik factory fonksiyonu.
-    Her /schemas, /graph, /subgraphs isteğinde MCP subprocess'ini yeniden başlatmamak için cache'lenir.
-    """
     global _STUDIO_GRAPH
     if _STUDIO_GRAPH is not None:
         return _STUDIO_GRAPH
@@ -27,4 +23,3 @@ async def make_studio_graph():
         wf = AgenticCommerceWorkflow()
         _STUDIO_GRAPH = await wf.build_graph(use_checkpointer=False)
         return _STUDIO_GRAPH
-

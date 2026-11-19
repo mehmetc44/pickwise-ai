@@ -175,15 +175,15 @@ function renderProducts(products, isAiSearch = false) {
                         ${similarityBadgeHtml}
                         ${badgeHtml}
                         
-                        <!-- AI Add Button (Shows on Hover) -->
+                        <!-- AI Add Button (Shows on Hover / Selected) -->
                         <div class="position-absolute p-2 ai-hover-overlay" style="top: 0; right: 0; z-index: 10;">
                             <button class="btn btn-sm btn-warning rounded shadow fw-bold ai-add-btn" 
-                                    title="AI'a Sor (Bağlama Ekle)" 
+                                    title="AI Bağlamına Ekle / Çıkar" 
                                     data-id="${p.id}" 
                                     data-name="${(p.name || p.title || '').replace(/"/g, '&quot;')}" 
                                     data-image="${imageUrl}" 
                                     data-price="${priceText}"
-                                    onclick="event.stopPropagation(); addToAIContext(this.getAttribute('data-id'), this.getAttribute('data-name'), this.getAttribute('data-image'), this.getAttribute('data-price'))">
+                                    onclick="event.stopPropagation(); toggleAIContext(this.getAttribute('data-id'), this.getAttribute('data-name'), this.getAttribute('data-image'), this.getAttribute('data-price'))">
                                 <i class="fa-solid fa-plus me-1"></i> Ekle
                             </button>
                         </div>
@@ -213,46 +213,84 @@ function renderProducts(products, isAiSearch = false) {
     });
 }
 
-// Global context array to hold selected products
+// Global context array and session ID
 window.aiSelectedProducts = [];
+window.aiSessionId = "web-" + Math.random().toString(36).slice(2, 10);
 
-// Function to add product to AI Context
-function addToAIContext(id, name, image, price) {
-    // Check if already added
-    if (window.aiSelectedProducts.find(p => p.id === id)) {
-        openAIPanel();
-        return;
+function toggleAIContext(id, name, image, price) {
+    const numId = Number(id) || id;
+    const exists = window.aiSelectedProducts.find(p => String(p.id) === String(numId));
+    if (exists) {
+        window.aiSelectedProducts = window.aiSelectedProducts.filter(p => String(p.id) !== String(numId));
+    } else {
+        window.aiSelectedProducts.push({ id: numId, name, image, price });
     }
-
-    const product = { id, name, image, price };
-    window.aiSelectedProducts.push(product);
-    
     renderAIContext();
-    openAIPanel();
 }
+window.toggleAIContext = toggleAIContext;
+window.addToAIContext = toggleAIContext;
 
-// Function to remove product from AI Context
 function removeFromAIContext(id) {
-    window.aiSelectedProducts = window.aiSelectedProducts.filter(p => p.id !== id);
+    window.aiSelectedProducts = window.aiSelectedProducts.filter(p => String(p.id) !== String(id));
     renderAIContext();
 }
 
-// Function to render the context area above the chat input
+function clearAIContext() {
+    window.aiSelectedProducts = [];
+    renderAIContext();
+}
+window.clearAIContext = clearAIContext;
+
+function syncCardButtons() {
+    const selectedIds = new Set(window.aiSelectedProducts.map(p => String(p.id)));
+    document.querySelectorAll(".ai-add-btn").forEach(btn => {
+        const pid = String(btn.getAttribute("data-id"));
+        if (selectedIds.has(pid)) {
+            btn.classList.remove("btn-warning");
+            btn.classList.add("btn-success");
+            btn.innerHTML = '<i class="fa-solid fa-check me-1"></i> Seçildi';
+        } else {
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-warning");
+            btn.innerHTML = '<i class="fa-solid fa-plus me-1"></i> Ekle';
+        }
+    });
+}
+
 function renderAIContext() {
     const contextArea = document.getElementById("aiContextArea");
+    const badge = document.getElementById("aiSelectedBadge");
+    const quickActions = document.getElementById("aiQuickActions");
+
+    syncCardButtons();
+
+    if (badge) {
+        if (window.aiSelectedProducts.length > 0) {
+            badge.textContent = window.aiSelectedProducts.length;
+            badge.classList.remove("d-none");
+        } else {
+            badge.classList.add("d-none");
+        }
+    }
+
     if (!contextArea) return;
-    
+
     if (window.aiSelectedProducts.length === 0) {
         contextArea.style.setProperty("display", "none", "important");
         contextArea.innerHTML = "";
+        if (quickActions) {
+            quickActions.classList.add("d-none");
+            quickActions.classList.remove("d-flex");
+            quickActions.innerHTML = "";
+        }
         return;
     }
-    
+
     contextArea.style.setProperty("display", "flex", "important");
     contextArea.innerHTML = window.aiSelectedProducts.map(p => `
         <div class="d-inline-flex align-items-center bg-white border rounded shadow-sm p-1 position-relative" style="min-width: 150px; max-width: 200px;">
             <img src="${p.image}" class="rounded" style="width: 30px; height: 30px; object-fit: cover; margin-right: 8px;">
-            <div class="text-truncate" style="font-size: 0.75rem; line-height: 1.1;">
+            <div class="text-truncate" style="font-size: 0.75rem; line-height: 1.1; padding-right: 14px;">
                 <div class="fw-bold text-truncate">${p.name}</div>
                 <div class="text-primary">${p.price}</div>
             </div>
@@ -260,7 +298,30 @@ function renderAIContext() {
                 <i class="fa-solid fa-times-circle"></i>
             </button>
         </div>
-    `).join("");
+    `).join("") + `
+        <button onclick="clearAIContext()" class="btn btn-sm btn-outline-secondary align-self-center ms-1" style="font-size: 0.7rem; white-space: nowrap;">
+            Temizle
+        </button>
+    `;
+
+    if (quickActions) {
+        quickActions.classList.remove("d-none");
+        quickActions.classList.add("d-flex");
+        const chips = window.aiSelectedProducts.length >= 2
+            ? [
+                { label: "⚖️ Karşılaştır", query: "Seçtiğim ürünleri detaylıca karşılaştır." },
+                { label: "🏆 Hangisi daha iyi?", query: "Seçtiğim ürünlerden hangisini almak daha mantıklı, neden?" },
+              ]
+            : [
+                { label: "💬 Yorumları Özetle", query: "Seçtiğim ürünün müşteri yorumlarını artıları ve eksileriyle özetle." },
+                { label: "📋 Detayları Göster", query: "Seçtiğim ürünün tüm teknik özelliklerini ve detaylarını anlat." },
+              ];
+        quickActions.innerHTML = chips.map(c => `
+            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill py-0 px-2" style="font-size: 0.75rem;" onclick="sendMessageToAI('${c.query.replace(/'/g, "\\'")}')">
+                ${c.label}
+            </button>
+        `).join("");
+    }
 }
 
 // Helper to open the AI offcanvas
@@ -272,10 +333,22 @@ function openAIPanel() {
     }
 }
 
+function formatMarkdown(text) {
+    return (text || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/^### (.*)$/gm, '<div class="fw-bold text-primary mt-2 mb-1">$1</div>')
+        .replace(/^## (.*)$/gm, '<div class="fw-bold fs-6 text-dark mt-2 mb-1">$1</div>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^- (.*)$/gm, '<div class="ms-2">• $1</div>')
+        .replace(/\n/g, '<br>');
+}
+
 // AI Chat Interaction Logic
-async function sendMessageToAI() {
+async function sendMessageToAI(overrideQuery) {
     const inputEl = document.getElementById("chatInput");
-    const query = inputEl.value.trim();
+    const query = (typeof overrideQuery === "string" ? overrideQuery : inputEl.value).trim();
     if (!query) return;
 
     const chatMessages = document.getElementById("chatMessages");
@@ -288,7 +361,7 @@ async function sendMessageToAI() {
             </div>
         </div>
     `;
-    inputEl.value = "";
+    if (typeof overrideQuery !== "string") inputEl.value = "";
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
     // Add typing indicator
@@ -310,6 +383,7 @@ async function sendMessageToAI() {
             },
             body: JSON.stringify({
                 query: query,
+                session_id: window.aiSessionId,
                 context_products: window.aiSelectedProducts
             })
         });
@@ -324,18 +398,51 @@ async function sendMessageToAI() {
         const typingEl = document.getElementById(typingId);
         if (typingEl) typingEl.remove();
 
-        // Convert newlines to HTML breaks and render markdown if possible (simple fallback)
-        const formattedResponse = data.response.replace(/\n/g, '<br>');
+        const formattedResponse = formatMarkdown(data.response);
 
         // Add AI response to UI
+        let miniCardsHtml = "";
+        if (Array.isArray(data.found_products) && data.found_products.length > 0) {
+            const topTwo = data.found_products.slice(0, 2);
+            miniCardsHtml = `
+                <div class="mt-2 pt-2 border-top d-flex flex-column gap-2">
+                    ${topTwo.map(p => {
+                        const img = p.image_url || p.images?.[0] || "https://via.placeholder.com/60x60?text=Ürün";
+                        const price = p.price ? `${p.price} ${p.currency || 'TRY'}` : 'Fiyat Yok';
+                        return `
+                            <a href="product.html?id=${p.id}" class="d-flex align-items-center gap-2 p-2 bg-light rounded border text-decoration-none text-dark">
+                                <img src="${img}" class="rounded" style="width: 44px; height: 44px; object-fit: cover;">
+                                <div class="overflow-hidden flex-grow-1">
+                                    <div class="fw-bold text-truncate" style="font-size: 0.78rem;">${p.name || 'Ürün'}</div>
+                                    <div class="text-danger fw-bold" style="font-size: 0.78rem;">${price}</div>
+                                </div>
+                                <i class="fa-solid fa-chevron-right text-muted small"></i>
+                            </a>
+                        `;
+                    }).join("")}
+                </div>
+            `;
+        }
+
         chatMessages.innerHTML += `
             <div class="d-flex mb-3">
                 <div class="bg-white text-dark p-3 rounded shadow-sm border" style="max-width: 90%; border-radius: 15px 15px 15px 0 !important;">
                     ${formattedResponse}
+                    ${miniCardsHtml}
                 </div>
             </div>
         `;
         chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // AI arama yaptıysa en benzer 20 ürünü ana ekranda listele
+        if (Array.isArray(data.found_products) && data.found_products.length > 0) {
+            const sectionTitle = document.querySelector("#sectionTitle");
+            if (sectionTitle) {
+                sectionTitle.innerHTML = `<i class="fa-solid fa-sparkles text-warning me-2"></i>AI Asistanın Bulduğu Ürünler <span class="badge bg-secondary fs-6 ms-2">${data.found_products.length} Ürün</span>`;
+            }
+            renderProducts(data.found_products, true);
+            syncCardButtons();
+        }
         
         // Clear context after successful query if desired (optional)
         // window.aiSelectedProducts = [];

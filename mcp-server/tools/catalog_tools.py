@@ -4,6 +4,23 @@ import httpx
 from config import settings
 
 
+def _format_product_for_llm(data: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": data.get("id"),
+        "name": data.get("name"),
+        "brand": data.get("brand"),
+        "category": data.get("full_path"),
+        "price": data.get("price"),
+        "currency": data.get("currency", "TRY"),
+        "gender": data.get("gender"),
+        "color": data.get("color"),
+        "rating": data.get("rating"),
+        "rating_count": data.get("rating_count"),
+        "review_count": data.get("review_count"),
+        "attributes": data.get("attributes"),
+    }
+
+
 def get_closest_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
     """
     Kullanıcının arama sorgusuna anlamsal (vektör benzerliği) olarak en yakın ürünleri katalogdan getirir.
@@ -21,13 +38,12 @@ def get_closest_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
                 "id": p.get("id"),
                 "name": p.get("name"),
                 "brand": p.get("brand"),
+                "category": p.get("full_path"),
                 "price": p.get("price"),
                 "currency": p.get("currency", "TRY"),
                 "rating": p.get("rating"),
                 "review_count": p.get("review_count"),
-                "full_path": p.get("full_path"),
                 "similarity": p.get("similarity"),
-                "product_url": p.get("product_url"),
             }
             for p in products
         ]
@@ -37,7 +53,7 @@ def get_closest_products(query: str, limit: int = 8) -> list[dict[str, Any]]:
 
 def get_product_details(product_id: int) -> dict[str, Any]:
     """
-    Tek bir ürünün tüm teknik özelliklerini, fiyatını, puanını ve kategorisini ID üzerinden getirir.
+    Tek bir ürünün teknik özelliklerini (attributes), fiyatını, puanını ve kategorisini ID üzerinden getirir.
     """
     url = f"{settings.CATALOG_API_URL}/api/v1/products/{product_id}"
     try:
@@ -46,7 +62,7 @@ def get_product_details(product_id: int) -> dict[str, Any]:
             if resp.status_code == 404:
                 return {"error": f"ID={product_id} olan ürün bulunamadı."}
             resp.raise_for_status()
-            return resp.json()
+            return _format_product_for_llm(resp.json())
     except Exception as exc:
         return {"error": f"Ürün detayı getirilemedi: {exc}"}
 
@@ -62,20 +78,7 @@ def compare_products(product_ids: list[int]) -> list[dict[str, Any]]:
             try:
                 resp = client.get(url)
                 if resp.status_code == 200:
-                    data = resp.json()
-                    results.append({
-                        "id": data.get("id"),
-                        "name": data.get("name"),
-                        "brand": data.get("brand"),
-                        "price": data.get("price"),
-                        "currency": data.get("currency"),
-                        "rating": data.get("rating"),
-                        "rating_count": data.get("rating_count"),
-                        "review_count": data.get("review_count"),
-                        "category": data.get("full_path"),
-                        "attributes": data.get("attributes"),
-                        "product_url": data.get("product_url"),
-                    })
+                    results.append(_format_product_for_llm(resp.json()))
                 else:
                     results.append({"id": pid, "error": f"Bulunamadı (HTTP {resp.status_code})"})
             except Exception as exc:
@@ -96,4 +99,3 @@ def get_product_reviews(product_id: int, limit: int = 20) -> list[dict[str, Any]
             return reviews[:limit] if isinstance(reviews, list) else []
     except Exception as exc:
         return [{"error": f"Yorumlar getirilemedi: {exc}"}]
-

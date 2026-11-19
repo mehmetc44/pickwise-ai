@@ -1,80 +1,53 @@
 # AgenticCommerce
 
-AgenticCommerce, **LangGraph**, **FastMCP** ve **pgvector** tabanlı; ürün keşfi, teknik detay inceleme, ürün karşılaştırma ve müşteri yorumu analizi yapabilen çoklu-ajan (Multi-Agent) e-ticaret asistanı platformudur.
+AgenticCommerce is an AI-powered e-commerce assistant ecosystem built with **LangGraph**, **LangChain**, **FastMCP**, and **pgvector**. Going beyond traditional keyword-based search bars, it provides autonomous reasoning, semantic product discovery, web-assisted compatibility research, product comparison, and customer review summarization — laying the foundation for **visual search**, **outfit & style recommendations**, and **virtual try-on** experiences.
 
 ---
 
-## 🏗️ Sistem Mimarisi
+## ✨ Key Capabilities
 
-Proje birbirinden bağımsız 4 ana bileşenden oluşur:
-
-### 1. `assistant-api` (LangGraph İş Akışı — Port: `8000`)
-Kullanıcıyla sohbet eden, araçları yöneten ve çok turlu oturum hafızasını (`MemorySaver`) tutan orkestrasyon katmanıdır.
-
-```text
-[START] ──► supervisor_node (ReAct Ajanı & Yanıt Üretici)
-                ├── delegate_to_search ──► search_node (MCP: get_closest_products) ──► supervisor_node
-                ├── detay/kıyas/yorum  ──► tool_node   (MCP: details, compare, reviews) ──► supervisor_node
-                └── doğrudan yanıt     ──► [END]
-```
-
-* **`supervisor_node` (`SupervisorAgent`):** Kullanıcının niyetini anlar, gereksiz soru sormadan arama yaptırır veya sohbet eder; araçlardan dönen sonuçları kullanıcıya Markdown formatında sunar.
-* **`search_node` (`SearchNode`):** `delegate_to_search` çağrısını yakalar, `mcp-server` üzerinden katalog araması yapar ve `found_products` state'ini günceller.
-* **`tool_node` (`ToolNode`):** MCP üzerinden ürün detayı, karşılaştırma ve yorum araçlarını çalıştırır.
-
-**Teknoloji Yığını:** Python, FastAPI, LangGraph, LangChain, DeepSeek / OpenAI / Ollama.
+* **Conversational Product Discovery:** Understands complex, natural-language shopping intents and surfaces the most relevant products using semantic vector search.
+* **Web-Assisted Compatibility Research:** Researches external technical specifications and compatibility details when catalog titles alone are not enough.
+* **Product Comparison & Review Insights:** Compares selected products side-by-side and summarizes customer reviews into clear pros and cons.
+* **Interactive Shopping UI:** Allows users to select products directly from the catalog as chat context, trigger quick comparisons/summaries, and view both highlighted picks in the assistant panel and full results on the main grid.
 
 ---
 
-### 2. `mcp-server` (Tekil MCP Tool Sunucusu)
-Ajanların `catalog-api` ile iletişim kurduğu standart **Model Context Protocol (FastMCP)** katmanıdır (`stdio` / `streamable_http`):
-* `get_closest_products`: Vektör benzerliği ile katalogdan ürün arama
-* `get_product_details`: Tekil ürünün teknik özelliklerini ve fiyatını getirme
-* `compare_products`: Birden fazla ürünü kıyaslama için toplu detay çekme
-* `get_product_reviews`: Ürün müşteri yorumlarını getirme
+## 🏗️ Project Structure
+
+* **`assistant-api` (Port `8000`):** FastAPI service powered by LangGraph and LangChain for multi-turn conversational orchestration and reasoning.
+* **`mcp-server`:** Model Context Protocol (`FastMCP`) server exposing catalog, comparison, review, and web search capabilities as standardized tools.
+* **`catalog-api` (Port `8001`):** FastAPI backend managing products, categories, reviews, and `pgvector` semantic similarity search using `Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0`.
+* **`frontend` (Port `3000`):** Web storefront with semantic search, product detail pages, and an interactive AI assistant panel.
 
 ---
 
-### 3. `catalog-api` (Katalog ve Vektör Servisi — Port: `8001`)
-Ürün, kategori ve yorum verilerini PostgreSQL + `pgvector` üzerinden sunan N-Tier FastAPI servisidir.
-* **Embedding Modeli:** `Trendyol/TY-ecomm-embed-multilingual-base-v1.2.0` (`shared/ai-models/embeddings`)
-* **Veritabanı:** PostgreSQL + `pgvector`
+## 🛠️ Setup & Running
 
----
-
-### 4. `frontend` (Web Arayüzü — Port: `3000`)
-Ürün listeleme, vektör tabanlı arama çubuğu, ürün detay sayfası ve AI asistan sohbet panelini içeren web arayüzü.
-
----
-
-## 🛠️ Kurulum ve Çalıştırma
-
-### Gereksinimler
+### Prerequisites
 * Python 3.12+
-* PostgreSQL (`pgvector` eklentisi aktif)
-* `uv` paket yöneticisi
+* PostgreSQL with `pgvector` enabled
+* `uv` package manager
 
-### Bağımlılıkları Yükleme
+### Install Dependencies
 ```bash
 uv sync
 ```
 
-### Tüm Servisleri Başlatma
-`catalog-api` (`:8001`), `assistant-api` (`:8000`) ve `frontend` (`:3000`) servislerini tek komutla ayağa kaldırır:
+### Start All Services
+Starts `catalog-api` (`:8001`), `assistant-api` (`:8000`), `frontend` (`:3000`), and `langgraph-dev` (`:2024`) with a single command:
 ```bash
 uv run python run.py
 ```
 
-### LangGraph Studio ile Görsel Test & Debug
-`catalog-api` çalışırken ajan akışını, düğüm geçişlerini ve state değişimlerini canlı izlemek için:
-```bash
-uv run langgraph dev --no-reload
-```
-*(İzleme/Tracing için `assistant-api/.env` içindeki `LANGCHAIN_TRACING_V2` ve `LANGCHAIN_API_KEY` değişkenleri kullanılır.)*
+### Tracing & Studio
+* **LangGraph Studio:** Available via the Studio URL printed in the terminal when running `run.py`.
+* **LangSmith Tracing:** Configured via `LANGCHAIN_TRACING_V2`, `LANGCHAIN_API_KEY`, and `LANGCHAIN_ENDPOINT` inside `assistant-api/.env`.
 
 ---
 
-## 🗺️ Planlanan Geliştirmeler (Yol Haritası)
-* `SearchNode` içerisine LLM tabanlı sorgu ayrıştırma ve **Tavily** (`web_search`) ile teknik uyumluluk araştırması eklenmesi
-* `catalog-api` üzerinde **Hibrit Arama (`pgvector + Full-Text/BM25 RRF + Cross-Encoder`)** motoruna geçiş
-* Görsel arama (**Vision Search**) ve sanal kıyafet deneme (**Virtual Try-On**) entegrasyonu
+## 🗺️ Roadmap
+* **Visual Search:** Find products, color variations, or similar styles directly from user-uploaded images (e.g., *"Find this skirt in blue"*).
+* **Outfit & Style Matching:** Suggest complementary pieces based on an uploaded item or style prompt (e.g., *"Find an old-money shirt to match these trousers"*).
+* **Virtual Try-On:** Preview selected garments on a user-provided photo.
+* **Hybrid Search:** Combine `pgvector` semantic search with `Full-Text / BM25` and `RRF` ranking.

@@ -107,7 +107,7 @@ if __name__ == "__main__":
     print("  assistant-api → http://localhost:8000")
     print("  frontend      → http://localhost:3000")
     print("  langgraph-dev → http://localhost:2024")
-    print("  Studio UI     → https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024")
+    print("  Studio UI     → https://eu.smith.langchain.com/studio/?baseUrl=http://127.0.0.1:2024")
     print("="*50)
     print("\nDurdurmak için Ctrl+C\n")
 

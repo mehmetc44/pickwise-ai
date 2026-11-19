@@ -3,9 +3,6 @@ from typing import Any
 
 
 def parse_mcp_tool_output(raw: Any) -> list[dict[str, Any]]:
-    """
-    MCP (langchain-mcp-adapters) çıktısını normalize eder.
-    """
     items: list[dict[str, Any]] = []
 
     def _collect(obj: Any):
@@ -28,4 +25,3 @@ def parse_mcp_tool_output(raw: Any) -> list[dict[str, Any]]:
 
     _collect(raw)
     return items
-

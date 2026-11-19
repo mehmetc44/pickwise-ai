@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-pydantic
-websockets
-requests
-psycopg2-binary
-torch
-sentence-transformers

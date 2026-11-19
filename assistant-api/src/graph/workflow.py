@@ -9,19 +9,10 @@ from agents.search_node import SearchNode
 from agents.supervisor import SupervisorAgent
 from graph.routers import route_search, route_supervisor
 from graph.state import AgenticCommerceState
-from tools.handoff_tools import delegate_to_search
 from tools.mcp_client import load_mcp_tools
 
 
 class AgenticCommerceWorkflow:
-    """
-    4 Düğümlü Çift ReAct LangGraph İş Akışı:
-      - supervisor_node: Ana ReAct Ajanı & Yanıt Üretici
-      - tool_node: Supervisor MCP araçları
-      - search_node: Uzman Arama ReAct Ajanı
-      - search_tool_node: Search MCP araçları
-    """
-
     def __init__(self):
         self.checkpointer = MemorySaver()
         self.app_graph = None
@@ -44,7 +35,7 @@ class AgenticCommerceWorkflow:
             if name in {"get_product_details", "compare_products", "get_product_reviews"}
         ]
 
-        supervisor = SupervisorAgent(tools=[delegate_to_search, *tool_node_tools])
+        supervisor = SupervisorAgent(tools=tool_node_tools)
         search_node = SearchNode(tools=search_tools)
 
         tool_node = ToolNode(tool_node_tools)
@@ -92,17 +83,30 @@ class AgenticCommerceWorkflow:
                 return
             self.app_graph = await self.build_graph(use_checkpointer=True)
 
-    async def aexecute(self, user_query: str, session_id: str = "default") -> dict:
+    async def aexecute(
+        self,
+        user_query: str,
+        session_id: str = "default",
+        context_products: list[dict] | None = None,
+    ) -> dict:
         await self.initialize()
         initial_state = {
             "messages": [HumanMessage(content=user_query)],
             "search_messages": [],
             "search_call_id": "",
+            "context_products": context_products or [],
             "found_products": [],
             "response": "",
         }
         config = {"configurable": {"thread_id": session_id}}
         return await self.app_graph.ainvoke(initial_state, config=config)
 
-    def execute(self, user_query: str, session_id: str = "default") -> dict:
-        return asyncio.run(self.aexecute(user_query, session_id=session_id))
+    def execute(
+        self,
+        user_query: str,
+        session_id: str = "default",
+        context_products: list[dict] | None = None,
+    ) -> dict:
+        return asyncio.run(
+            self.aexecute(user_query, session_id=session_id, context_products=context_products)
+        )
