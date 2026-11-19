@@ -1,6 +1,6 @@
-# AgenticCommerce
+# PickWise AI
 
-AgenticCommerce is an AI-powered e-commerce assistant ecosystem built with **LangGraph**, **LangChain**, **FastMCP**, and **pgvector**. Going beyond traditional keyword-based search bars, it provides autonomous reasoning, semantic product discovery, web-assisted compatibility research, product comparison, and customer review summarization — laying the foundation for **visual search**, **outfit & style recommendations**, and **virtual try-on** experiences.
+PickWise AI is an AI-powered e-commerce assistant ecosystem built with **LangGraph**, **LangChain**, **FastMCP**, and **pgvector**. Going beyond traditional keyword-based search bars, it provides autonomous reasoning, semantic product discovery, web-assisted compatibility research, product comparison, and customer review summarization — laying the foundation for **visual search**, **outfit & style recommendations**, and **virtual try-on** experiences.
 
 ---
 
